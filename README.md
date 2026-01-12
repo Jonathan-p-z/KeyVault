@@ -1,142 +1,117 @@
-# mdp — Gestionnaire de mots de passe chiffré (vault.bin) + backup (copie miroir)
+# mdp — Coffre de mots de passe chiffré + backup
 
-Ce dépôt contient 2 programmes :
+Ce repo contient une application avec 2 outils :
 
-1) **mdp** : gestionnaire de mots de passe (coffre chiffré) stocké dans `vault.bin`.
-2) **backup** : outil de sauvegarde (copie miroir) avec CLI + GUI.
+- **MDP** : gestionnaire de mots de passe dans un coffre chiffré.
+- **Backup** : copie “miroir” d’un dossier (GUI + CLI).
 
----
+## Sécurité (résumé)
 
-## 1) mdp (gestionnaire de mots de passe)
+- Chiffrement/déchiffrement : `cryptography` (Fernet).
+- Dérivation de clé : **Argon2id** (format **v4**) + sel aléatoire.
+- Anti-`strings` : le coffre est encodé pour éviter d’exposer des marqueurs ASCII (utile contre des inspections rapides type `strings`).
+- Compatibilité : lecture des anciens formats (legacy/v2/v3) + migration automatique vers v4 après déchiffrement.
 
-### Fonctionnalités
-- Chiffrement/déchiffrement via **Fernet** (AES + HMAC) de `cryptography`
-- Dérivation de clé via **Scrypt** (format "v2" avec en-tête + sel + paramètres)
-- Compatibilité "legacy" (PBKDF2 + sel fixe) pour relire d’anciens fichiers si besoin
-- Coffre au format **JSON** (chiffré) : entrées *Titre / Identifiant / Mot de passe / Notes*
-- **GUI** : liste + recherche, ajouter/modifier/supprimer, copier le mot de passe dans le presse-papiers
-- **CLI** : mode “legacy” (éditeur de texte) si tu l’utilises encore
+## Où est stocké le coffre ?
 
-### Pré-requis
-- Python 3.10+ recommandé (testé aussi sous Windows 11)
-- Dépendances :
-  - `cryptography`
-  # mdp — Gestionnaire de mots de passe chiffré + outil de sauvegarde
+- Windows : `%APPDATA%\mdp_app\vault.bin` (marqué “caché + système”).
+- Linux : `~/.mdp_app/vault.bin`.
 
-  Ce repo contient **une application** avec 2 outils accessibles via une interface graphique :
+## Lancer le projet
 
-  - **MDP** : gestionnaire de mots de passe chiffré (coffre).
-  - **Backup** : sauvegarde d’un dossier (copie miroir).
+### Option A — Windows (recommandé)
 
-  ---
+1) Installer Python 3.10+ : https://www.python.org/downloads/
+2) Double-cliquer sur `run.bat`
 
-  ## Ce que fait le programme (détails)
+Alternative PowerShell :
 
-  ### 1) Gestionnaire de mots de passe (MDP)
+```powershell
+.\run.ps1
+.\run.ps1 -Theme clam
+```
 
-  - Tu crées un **coffre chiffré** protégé par un **mot de passe maître**.
-  - Le coffre contient des entrées : **Titre / Identifiant / Mot de passe / Notes**.
-  - Dans la GUI, tu peux :
-    - rechercher,
-    - ajouter / modifier / supprimer,
-    - copier le mot de passe dans le presse-papiers.
+### Option B — Ligne de commande (Windows/Linux)
 
-  **Chiffrement / sécurité (résumé)**
-  - Chiffrement/déchiffrement via `cryptography` (Fernet).
-  - Dérivation de clé avec **Scrypt** (format v2 avec en-tête + sel + paramètres).
-  - Compatibilité “legacy” : lecture d’anciens fichiers si besoin.
+Créer/activer le venv :
 
-  **Où sont stockées les données ?**
-  - Le coffre est un fichier chiffré stocké hors du dossier du projet.
-    - Windows : `%APPDATA%\mdp_app\vault.bin` (marqué “caché + système”)
-    - Linux : `~/.mdp_app/vault.bin`
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
-  Important : “caché” = moins visible, mais pas “inexistant”. Sans le mot de passe maître, le fichier est **inutilisable** (chiffré).
+Installer les dépendances :
 
-  ### 2) Backup (sauvegarde)
+```powershell
+pip install -r requirements.txt
+```
 
-  - Copie un dossier **source** vers un dossier **destination** en recréant l’arborescence.
-  - C’est une **copie miroir** : si un fichier existe déjà, il peut être écrasé.
-  - Affiche une progression en GUI et écrit un log dans `backup.log`.
+Lancer l’app (menu GUI : choisir MDP / Backup) :
 
-  ---
+```powershell
+python -m mdp_app
+```
 
-  ## Comment lancer le projet (le plus simple)
+Accès direct (optionnel) :
 
-  ### Option A — Windows (recommandé, “n’importe qui”)
+```powershell
+python app.py --mdp
+python app.py --backup
+```
 
-  1) Installer **Python 3.10+** (une seule fois) : https://www.python.org/downloads/
-  2) Télécharger le repo (ZIP) et l’extraire.
-  3) Double-cliquer sur `run.bat`
+## Backup
 
-  Ce que fait `run.bat` :
-  - crée `.venv` si besoin,
-  - installe les dépendances,
-  - lance `python -m mdp_app`.
+### GUI
 
-  Alternative PowerShell :
-  ```powershell
-  .\run.ps1
-  ```
+```powershell
+python backup.py --gui
+```
 
-  ### Option B — Ligne de commande (Windows/Linux)
+### CLI (copie)
 
-  Depuis la racine du projet :
-  ```powershell
-  python -m venv .venv
-  ```
+```powershell
+python backup.py --src "C:\source" --dst "D:\dest"
+```
 
-  Activer le venv :
-  - Windows (PowerShell) :
-  ```powershell
-  .\.venv\Scripts\Activate.ps1
-  ```
-  - Linux/macOS :
-  ```bash
-  source .venv/bin/activate
-  ```
+### CLI (miroir strict — DANGEREUX)
 
-  Installer les dépendances :
-  ```powershell
-  pip install -r requirements.txt
-  ```
+Supprime dans la destination ce qui n’existe plus dans la source :
 
-  Lancer l’app (menu GUI : choisir MDP ou Backup) :
-  ```powershell
-  python -m mdp_app
-  ```
+```powershell
+python backup.py --src "C:\source" --dst "D:\dest" --mirror-delete
+```
 
-  Accès direct (optionnel) :
-  ```powershell
-  python -m mdp_app --mdp
-  python -m mdp_app --backup
-  ```
+## Développement (qualité)
 
-  ---
+Installer les deps dev :
 
-  ## Commandes utiles
+```powershell
+pip install -r requirements-dev.txt
+```
 
-  ### Thème (look GUI)
-  ```powershell
-  python -m mdp_app --theme vista
-  python -m mdp_app --theme clam
-  ```
+Lint :
 
-  ### Backup (CLI)
-  ```powershell
-  python backup.py --src "C:\chemin\source" --dst "D:\chemin\backup"
-  ```
+```powershell
+ruff check .
+```
 
-  ---
+Tests :
 
-  ## Publication GitHub (public)
+```powershell
+pytest
+```
 
-  - Ne commit jamais : `vault.bin`, `secret.enc`, `secret.txt`, logs, `dist/`, `build/`.
-  - Tout ça est déjà prévu dans `.gitignore`.
+CI : GitHub Actions lance `ruff` + `pytest` sur Windows et Linux.
 
-  ---
+## Build des exécutables (PyInstaller)
 
-  ## Licence
+```powershell
+pyinstaller mdp_app.spec
+pyinstaller backup.spec
+```
 
-  MIT — voir le fichier `LICENSE`.
+Résultat : `dist\mdp_app.exe` et `dist\backup.exe`.
 
+## Licence
+
+MIT — voir `LICENSE`.
