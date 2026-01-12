@@ -4,6 +4,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
+
 def _parse_args():
     p = argparse.ArgumentParser(
         description="backup - sauvegarde simple (copie miroir)",
@@ -18,6 +19,11 @@ def _parse_args():
     p.add_argument("--gui", action="store_true", help="lancer l'interface graphique")
     p.add_argument("--src", help="dossier source à sauvegarder")
     p.add_argument("--dst", help="dossier destination (copie miroir)")
+    p.add_argument(
+        "--mirror-delete",
+        action="store_true",
+        help="miroir strict: supprime dans la destination ce qui n'existe plus en source (DANGEREUX)",
+    )
     p.add_argument("--debug", action="store_true", help="afficher les erreurs détaillées (traceback)")
     return p.parse_args()
 
@@ -69,4 +75,4 @@ if __name__ == "__main__":
             "Erreur: le programme a planté.\n"
             f"Un log a été écrit ici: {crash_path.resolve()}\n"
             "Relance avec `--debug` pour afficher la traceback."
-        )
+        ) from e

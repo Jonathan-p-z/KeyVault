@@ -1,0 +1,31 @@
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [
+  "build",
+  "dist",
+  "__pycache__",
+  "_backup_test_out",
+  "_backup_test_out2",
+  "tools",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "I",  # isort
+  "B",  # flake8-bugbear
+]
+ignore = [
+  "E501",  # line length handled pragmatically
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mdp_app", "backup_app"]
+

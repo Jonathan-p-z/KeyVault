@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 import sys
 import tkinter as tk
-from tkinter import ttk
 from tkinter import font as tkfont
+from tkinter import ttk
 
 
 def apply_style(root: tk.Tk, *, theme: str = "auto") -> str:

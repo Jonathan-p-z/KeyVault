@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
-from tkinter import messagebox
-from tkinter import ttk
 from datetime import datetime, timezone
+from tkinter import messagebox, ttk
 
 from cryptography.fernet import InvalidToken
 

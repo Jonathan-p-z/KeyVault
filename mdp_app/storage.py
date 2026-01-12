@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from .config import DATA_DIR, FICHIER, FICHIER_CLAIR, LEGACY_APPDATA_FICHIER, LEGACY_FICHIER
+from .config import FICHIER, FICHIER_CLAIR, LEGACY_APPDATA_FICHIER, LEGACY_FICHIER
 
 
 def _hide_on_windows(path: Path) -> None:

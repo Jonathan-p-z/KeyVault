@@ -1,5 +1,5 @@
 import argparse
-import traceback
+
 
 def _parse_args():
     p = argparse.ArgumentParser(
@@ -16,10 +16,11 @@ def _parse_args():
                "\n"
                "Créer l'exécutable (PowerShell, commandes exactes):\n"
                "  cd C:\\Users\\jpere\\Documents\\mdp\n"
-               "  .\\.venv-1\\Scripts\\activate\n"
-               "  python -m pip install -U pyinstaller\n"
-               "  python -m PyInstaller --onefile backup.py\n"
-               "  # Résultat: .\\dist\\backup.exe\n"
+               "  .\\.venv\\Scripts\\Activate.ps1\n"
+               "  python -m pip install -r requirements-dev.txt\n"
+               "  pyinstaller mdp_app.spec\n"
+               "  pyinstaller backup.spec\n"
+               "  # Résultat: .\\dist\\mdp_app.exe et .\\dist\\backup.exe\n"
                "\n"
                "Exécutable (après PyInstaller):\n"
                "  .\\dist\\backup.exe --gui\n"
@@ -48,7 +49,7 @@ if __name__ == "__main__":
                 "Impossible de démarrer la GUI.\n"
                 f"Détail: {e}\n"
                 "Astuce: relance avec `python script.py --gui --debug` pour la traceback complète."
-            )
+            ) from e
     else:
         from mdp_app.cli import main as main_cli  # lazy import
         main_cli()

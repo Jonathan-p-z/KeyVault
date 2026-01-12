@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-
 VAULT_MAGIC = "MDP_VAULT"
 VAULT_VERSION = 1
 

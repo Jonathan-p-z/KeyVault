@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import traceback
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -35,6 +34,11 @@ def _parse_args() -> argparse.Namespace:
         "--backup-cli",
         action="store_true",
         help="exécuter la sauvegarde en mode CLI (utile si lancé depuis un terminal)",
+    )
+    p.add_argument(
+        "--mirror-delete",
+        action="store_true",
+        help="backup: miroir strict (supprime dans la destination ce qui n'existe plus en source)",
     )
 
     p.add_argument("--debug", action="store_true", help="afficher les erreurs détaillées (traceback)")
@@ -140,7 +144,15 @@ def main() -> None:
                 from backup_app.cli import main as backup_cli
 
                 raise SystemExit(
-                    backup_cli(BackupArgs(gui=False, src=args.src, dst=args.dst, debug=args.debug))
+                    backup_cli(
+                        BackupArgs(
+                            gui=False,
+                            src=args.src,
+                            dst=args.dst,
+                            mirror_delete=getattr(args, "mirror_delete", False),
+                            debug=args.debug,
+                        )
+                    )
                 )
 
             from backup_app.gui import main as backup_gui
@@ -174,7 +186,7 @@ def main() -> None:
             "Erreur: le programme a planté.\n"
             f"Détail: {e}\n"
             "Relance avec --debug pour afficher la traceback."
-        )
+        ) from e
 
 
 if __name__ == "__main__":

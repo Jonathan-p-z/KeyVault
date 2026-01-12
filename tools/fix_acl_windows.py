@@ -14,7 +14,7 @@ def main() -> int:
     _add_project_root_to_syspath()
 
     from mdp_app.config import DATA_DIR, FICHIER
-    from mdp_app.storage import _harden_acl_on_windows  # type: ignore
+    from mdp_app.storage import _harden_acl_on_windows
 
     data_dir = Path(DATA_DIR)
     vault = Path(FICHIER)

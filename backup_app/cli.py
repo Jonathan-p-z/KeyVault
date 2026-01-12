@@ -10,7 +10,8 @@ class Args:
     gui: bool
     src: str | None
     dst: str | None
-    debug: bool
+    mirror_delete: bool = False
+    debug: bool = False
 
 
 def _progress(done: int, total: int, msg: str) -> None:
@@ -26,12 +27,13 @@ def main(args: Args) -> int:
         return 2
 
     try:
-        result = run_backup(args.src, args.dst, progress=_progress)
+        result = run_backup(args.src, args.dst, progress=_progress, mirror_delete=getattr(args, "mirror_delete", False))
     except Exception as e:
         print(f"Erreur: {e}")
         return 2
 
-    print(f"Sauvegarde terminée: {result.copied_files} fichiers -> {args.dst}")
+    extra = f", {result.deleted_files} supprimés" if getattr(args, "mirror_delete", False) else ""
+    print(f"Sauvegarde terminée: {result.copied_files} fichiers{extra} -> {args.dst}")
     if result.errors:
         print(f"Erreurs: {len(result.errors)} (voir backup.log)")
         return 1

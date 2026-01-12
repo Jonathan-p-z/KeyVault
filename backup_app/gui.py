@@ -5,8 +5,9 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from .core import run_backup
 from mdp_app.ui_style import apply_style
+
+from .core import run_backup
 
 
 class App(ttk.Frame):
