@@ -30,6 +30,23 @@ LEGACY_APPDATA_FICHIER = str(DATA_DIR / "secret.enc")
 MAGIC_V2 = b"MDP2"
 HEADER_V2 = struct.Struct(">4s16sIII")
 
+# V3: identique à V2 (Scrypt + Fernet) mais l'octet-stream final est
+# encodé pour éviter de laisser apparaître des chaînes ASCII via `strings`.
+MAGIC_V3 = b"MDP3"
+
+# V4: Argon2id + Fernet, encodé anti-`strings` (même encodage que V3).
+# HEADER_V2 est réutilisé: (magic, salt, time_cost, memory_cost_kib, parallelism)
+MAGIC_V4 = b"MDP4"
+
+# Argon2id defaults (offline attack resistance). memory_cost est en KiB.
+#
+# Plus c'est élevé, plus un attaquant (GPU/ASIC) est ralenti, mais plus
+# ton PC mettra de temps à (dé)chiffrer. Les valeurs ci-dessous visent un
+# bon compromis "gestionnaire de mots de passe".
+ARGON2_TIME_COST = 4
+ARGON2_MEMORY_COST_KIB = 262144  # 256 MiB
+ARGON2_PARALLELISM = 1
+
 SCRYPT_N = 2**18  # 262144
 SCRYPT_R = 8
 SCRYPT_P = 1

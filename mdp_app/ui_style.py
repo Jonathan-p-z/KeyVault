@@ -27,8 +27,6 @@ def apply_style(root: tk.Tk, *, theme: str = "auto") -> str:
     except tk.TclError:
         used_theme = style.theme_use()
 
-    # Fonts
-    # Use a slightly nicer default font on Windows.
     try:
         base_size = 10 if os.name == "nt" else 10
         family = "Segoe UI" if os.name == "nt" else tkfont.nametofont("TkDefaultFont").cget("family")
@@ -40,18 +38,13 @@ def apply_style(root: tk.Tk, *, theme: str = "auto") -> str:
         style.configure("Primary.TButton", font=strong, padding=(14, 8))
         style.configure("TLabelframe", padding=(12, 10))
         style.configure("TLabelframe.Label", font=strong)
-
-        # Treeview readability
         style.configure("Treeview", rowheight=28)
         style.configure("Treeview.Heading", font=strong)
 
-        # Subtle secondary label
         style.configure("Muted.TLabel", foreground="#666")
     except Exception:
-        # Best effort; keep defaults if anything goes wrong.
         pass
 
-    # Better scaling on Windows high-DPI (best effort)
     try:
         if sys.platform.startswith("win"):
             root.tk.call("tk", "scaling", 1.0)

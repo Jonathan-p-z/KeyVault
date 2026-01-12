@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from cryptography.fernet import InvalidToken
 
 from .config import FICHIER
-from .crypto import chiffrer_bytes_v2, dechiffrer_bytes
+from .crypto import chiffrer_bytes_v4, dechiffrer_bytes, decoder
 from .editor import avertir_mdp_faible
 from .storage import ecrire_chiffre, lire_chiffre
 from .ui_style import apply_style
@@ -420,7 +420,17 @@ class CoffreGUI(ttk.Frame):
                 return
             tentative += 1
             try:
-                contenu = dechiffrer_bytes(mdp, lire_chiffre())
+                raw = lire_chiffre()
+                version = decoder(raw)[0]
+                contenu = dechiffrer_bytes(mdp, raw)
+
+                # Migration automatique: une fois déverrouillé, on réécrit en v3
+                # pour éviter que `strings` révèle "MDP2" + token base64.
+                if version != "v4":
+                    try:
+                        ecrire_chiffre(chiffrer_bytes_v4(mdp, contenu, salt=os.urandom(16)))
+                    except Exception:
+                        pass
                 self._mdp = mdp
 
                 self._vault = load_vault_from_bytes(contenu)
@@ -448,7 +458,7 @@ class CoffreGUI(ttk.Frame):
         contenu = dump_vault_to_bytes(self._vault)
 
         try:
-            data = chiffrer_bytes_v2(mdp, contenu, salt=os.urandom(16))
+            data = chiffrer_bytes_v4(mdp, contenu, salt=os.urandom(16))
             ecrire_chiffre(data)
             self._mdp = mdp
             self._dirty = False

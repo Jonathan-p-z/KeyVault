@@ -17,27 +17,101 @@ def _hide_on_windows(path: Path) -> None:
         FILE_ATTRIBUTE_SYSTEM = 0x4
         ctypes.windll.kernel32.SetFileAttributesW(str(path), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)
     except Exception:
-        # Best effort: if this fails, file is still encrypted.
         pass
 
 
 def _harden_acl_on_windows(path: Path) -> None:
     if os.name != "nt":
         return
-    # Best-effort: remove inheritance and grant only current user full control.
-    # This does not make the file "invisible", but prevents other local accounts from opening it.
     try:
-        username = os.environ.get("USERNAME")
-        if not username:
+        # IMPORTANT: ne jamais retirer l'héritage (/inheritance:r) ici.
+        # Ça peut verrouiller le dossier si l'identité n'est pas correctement résolue
+        # (ex: comptes Microsoft/AzureAD, WSL interop, etc.).
+
+        # Récupère le SID de l'utilisateur courant pour un grant robuste.
+        def _current_user_sid() -> str | None:
+            import ctypes
+            from ctypes import wintypes
+
+            advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+            TOKEN_QUERY = 0x0008
+            TokenUser = 1
+
+            class SID_AND_ATTRIBUTES(ctypes.Structure):
+                _fields_ = [("Sid", wintypes.LPVOID), ("Attributes", wintypes.DWORD)]
+
+            class TOKEN_USER(ctypes.Structure):
+                _fields_ = [("User", SID_AND_ATTRIBUTES)]
+
+            OpenProcessToken = advapi32.OpenProcessToken
+            OpenProcessToken.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE)]
+            OpenProcessToken.restype = wintypes.BOOL
+
+            GetTokenInformation = advapi32.GetTokenInformation
+            GetTokenInformation.argtypes = [
+                wintypes.HANDLE,
+                wintypes.DWORD,
+                wintypes.LPVOID,
+                wintypes.DWORD,
+                ctypes.POINTER(wintypes.DWORD),
+            ]
+            GetTokenInformation.restype = wintypes.BOOL
+
+            ConvertSidToStringSidW = advapi32.ConvertSidToStringSidW
+            ConvertSidToStringSidW.argtypes = [wintypes.LPVOID, ctypes.POINTER(wintypes.LPWSTR)]
+            ConvertSidToStringSidW.restype = wintypes.BOOL
+
+            LocalFree = kernel32.LocalFree
+            LocalFree.argtypes = [wintypes.HLOCAL]
+            LocalFree.restype = wintypes.HLOCAL
+
+            token = wintypes.HANDLE()
+            if not OpenProcessToken(kernel32.GetCurrentProcess(), TOKEN_QUERY, ctypes.byref(token)):
+                return None
+            try:
+                needed = wintypes.DWORD(0)
+                GetTokenInformation(token, TokenUser, None, 0, ctypes.byref(needed))
+                buf = ctypes.create_string_buffer(needed.value)
+                if not GetTokenInformation(token, TokenUser, buf, needed.value, ctypes.byref(needed)):
+                    return None
+
+                tu = ctypes.cast(buf, ctypes.POINTER(TOKEN_USER)).contents
+                sid_ptr = tu.User.Sid
+
+                sid_str = wintypes.LPWSTR()
+                if not ConvertSidToStringSidW(sid_ptr, ctypes.byref(sid_str)):
+                    return None
+                try:
+                    return sid_str.value
+                finally:
+                    LocalFree(sid_str)
+            finally:
+                kernel32.CloseHandle(token)
+
+        sid = _current_user_sid()
+        if not sid:
             return
+
+        # icacls accepte les SIDs avec un '*' (ex: *S-1-5-21-...).
+        principal = f"*{sid}"
+
+        # Active l'héritage (si possible) et donne Full Control à l'utilisateur courant.
         subprocess.run(
-            ["icacls", str(path), "/inheritance:r"],
+            ["icacls", str(path), "/inheritance:e"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
         )
+
+        if path.exists() and path.is_dir():
+            grant = f"{principal}:(OI)(CI)F"
+        else:
+            grant = f"{principal}:(F)"
+
         subprocess.run(
-            ["icacls", str(path), "/grant:r", f"{username}:(F)"],
+            ["icacls", str(path), "/grant", grant],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
@@ -55,8 +129,7 @@ def _ensure_parent(path: Path) -> None:
 def _maybe_migrate_legacy(default_path: Path) -> None:
     if default_path.exists():
         return
-
-    # 1) ancien chemin dans AppData (%APPDATA%\mdp_app\secret.enc)
+    
     legacy_appdata = Path(LEGACY_APPDATA_FICHIER)
     if legacy_appdata.exists() and legacy_appdata.is_file():
         try:
@@ -68,7 +141,6 @@ def _maybe_migrate_legacy(default_path: Path) -> None:
         except Exception:
             pass
 
-    # 2) ancien chemin dans le dossier courant (./secret.enc)
     legacy = Path(LEGACY_FICHIER)
     if legacy.exists() and legacy.is_file():
         try:
@@ -90,7 +162,25 @@ def lire_chiffre(path: str | Path = FICHIER) -> bytes:
 def ecrire_chiffre(data: bytes, path: str | Path = FICHIER) -> None:
     p = Path(path)
     _ensure_parent(p)
-    p.write_bytes(data)
+    # Écriture atomique: écrire dans un fichier temporaire puis remplacer.
+    # Sur Windows, cela évite certains "Permission denied" lors d'un overwrite direct.
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    try:
+        tmp.write_bytes(data)
+        try:
+            os.replace(tmp, p)
+        finally:
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except Exception:
+                    pass
+    except PermissionError:
+        # Tentative de réparation soft des ACL puis retry.
+        _harden_acl_on_windows(p.parent)
+        _harden_acl_on_windows(p)
+        tmp.write_bytes(data)
+        os.replace(tmp, p)
     _hide_on_windows(p)
     _harden_acl_on_windows(p)
 
@@ -103,6 +193,20 @@ def lire_clair(path: str | Path = FICHIER_CLAIR) -> bytes:
 def ecrire_clair(data: bytes, path: str | Path = FICHIER_CLAIR) -> None:
     p = Path(path)
     _ensure_parent(p)
-    p.write_bytes(data)
-    # Le clair ne devrait pas être utilisé en GUI, mais on le cache aussi.
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    try:
+        tmp.write_bytes(data)
+        try:
+            os.replace(tmp, p)
+        finally:
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except Exception:
+                    pass
+    except PermissionError:
+        _harden_acl_on_windows(p.parent)
+        _harden_acl_on_windows(p)
+        tmp.write_bytes(data)
+        os.replace(tmp, p)
     _hide_on_windows(p)
