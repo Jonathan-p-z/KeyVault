@@ -1,4 +1,4 @@
-# mdp — Coffre de mots de passe chiffré + backup
+# Coffre de mots de passe chiffré + backup
 
 Ce repo contient une application avec 2 outils :
 
@@ -111,7 +111,3 @@ pyinstaller backup.spec
 ```
 
 Résultat : `dist\mdp_app.exe` et `dist\backup.exe`.
-
-## Licence
-
-MIT — voir `LICENSE`.
