@@ -38,6 +38,12 @@ MAGIC_V3 = b"MDP3"
 # HEADER_V2 est réutilisé: (magic, salt, time_cost, memory_cost_kib, parallelism)
 MAGIC_V4 = b"MDP4"
 
+# V5: Argon2id + AES-GCM (AEAD moderne), encodé anti-`strings`.
+# HEADER_V2 est réutilisé: (magic, salt, time_cost, memory_cost_kib, parallelism)
+MAGIC_V5 = b"MDP5"
+
+AEAD_NONCE_SIZE = 12  # AES-GCM nonce length
+
 # Argon2id defaults (offline attack resistance). memory_cost est en KiB.
 #
 # Plus c'est élevé, plus un attaquant (GPU/ASIC) est ralenti, mais plus
