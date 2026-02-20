@@ -7,10 +7,12 @@ Ce repo contient une application avec 2 outils :
 
 ## Sécurité (résumé)
 
-- Chiffrement/déchiffrement : `cryptography` (Fernet).
-- Dérivation de clé : **Argon2id** (format **v4**) + sel aléatoire.
+- Chiffrement/déchiffrement : `cryptography`.
+	- Format actuel (**v5**) : **AES-GCM (AEAD moderne)**.
+	- Anciens formats : compatibilité conservée (legacy/v2/v3/v4).
+- Dérivation de clé : **Argon2id** (v4/v5) + sel aléatoire.
 - Anti-`strings` : le coffre est encodé pour éviter d’exposer des marqueurs ASCII (utile contre des inspections rapides type `strings`).
-- Compatibilité : lecture des anciens formats (legacy/v2/v3) + migration automatique vers v4 après déchiffrement.
+- Migration automatique : après déchiffrement réussi d’un ancien format, le coffre est ré-écrit en **v5**.
 
 ## Où est stocké le coffre ?
 

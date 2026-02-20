@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import base64
+import os
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 from .config import (
+    AEAD_NONCE_SIZE,
     ARGON2_MEMORY_COST_KIB,
     ARGON2_PARALLELISM,
     ARGON2_TIME_COST,
@@ -17,6 +20,7 @@ from .config import (
     MAGIC_V2,
     MAGIC_V3,
     MAGIC_V4,
+    MAGIC_V5,
     SCRYPT_N,
     SCRYPT_P,
     SCRYPT_R,
@@ -80,11 +84,11 @@ def generer_cle_scrypt(mdp: str, salt: bytes, n: int, r: int, p: int) -> bytes:
     return base64.urlsafe_b64encode(kdf.derive(mdp.encode("utf-8")))
 
 
-def generer_cle_argon2id(mdp: str, salt: bytes, time_cost: int, memory_cost_kib: int, parallelism: int) -> bytes:
+def generer_cle_argon2id_raw(mdp: str, salt: bytes, time_cost: int, memory_cost_kib: int, parallelism: int) -> bytes:
     # Import local pour éviter de casser l'app si la dépendance n'est pas encore installée.
     from argon2.low_level import Type, hash_secret_raw
 
-    raw = hash_secret_raw(
+    return hash_secret_raw(
         secret=mdp.encode("utf-8"),
         salt=salt,
         time_cost=int(time_cost),
@@ -93,6 +97,11 @@ def generer_cle_argon2id(mdp: str, salt: bytes, time_cost: int, memory_cost_kib:
         hash_len=32,
         type=Type.ID,
     )
+
+
+def generer_cle_argon2id(mdp: str, salt: bytes, time_cost: int, memory_cost_kib: int, parallelism: int) -> bytes:
+    # Fernet attend une clé en base64 urlsafe.
+    raw = generer_cle_argon2id_raw(mdp, salt=salt, time_cost=time_cost, memory_cost_kib=memory_cost_kib, parallelism=parallelism)
     return base64.urlsafe_b64encode(raw)
 
 
@@ -107,6 +116,11 @@ def encoder_v3(token: bytes, salt: bytes, n: int, r: int, p: int) -> bytes:
 
 def encoder_v4(token: bytes, salt: bytes, time_cost: int, memory_cost_kib: int, parallelism: int) -> bytes:
     inner = HEADER_V2.pack(MAGIC_V4, salt, time_cost, memory_cost_kib, parallelism) + token
+    return _encode_no_strings(inner)
+
+
+def encoder_v5(token: bytes, salt: bytes, time_cost: int, memory_cost_kib: int, parallelism: int) -> bytes:
+    inner = HEADER_V2.pack(MAGIC_V5, salt, time_cost, memory_cost_kib, parallelism) + token
     return _encode_no_strings(inner)
 
 
@@ -129,6 +143,10 @@ def decoder(data: bytes):
             _magic, salt, time_cost, memory_cost_kib, parallelism = HEADER_V2.unpack(decoded[: HEADER_V2.size])
             token = decoded[HEADER_V2.size :]
             return ("v4", salt, time_cost, memory_cost_kib, parallelism, token)
+        if magic == MAGIC_V5:
+            _magic, salt, time_cost, memory_cost_kib, parallelism = HEADER_V2.unpack(decoded[: HEADER_V2.size])
+            token = decoded[HEADER_V2.size :]
+            return ("v5", salt, time_cost, memory_cost_kib, parallelism, token)
         # Tolérance: si un fichier V2 a été encodé par erreur.
         if magic == MAGIC_V2:
             _magic, salt, n, r, p = HEADER_V2.unpack(decoded[: HEADER_V2.size])
@@ -140,6 +158,14 @@ def decoder(data: bytes):
 
 def dechiffrer_bytes(mdp: str, data: bytes) -> bytes:
     version, salt, n, r, p, token = decoder(data)
+    if version == "v5":
+        if len(token) < AEAD_NONCE_SIZE:
+            raise ValueError("Fichier chiffré v5 invalide (nonce manquant)")
+        nonce = token[:AEAD_NONCE_SIZE]
+        ciphertext = token[AEAD_NONCE_SIZE:]
+        aad = HEADER_V2.pack(MAGIC_V5, salt, int(n), int(r), int(p))
+        key = generer_cle_argon2id_raw(mdp, salt=salt, time_cost=n, memory_cost_kib=r, parallelism=p)
+        return AESGCM(key).decrypt(nonce, ciphertext, aad)
     if version == "v4":
         cle = generer_cle_argon2id(mdp, salt=salt, time_cost=n, memory_cost_kib=r, parallelism=p)
         return Fernet(cle).decrypt(token)
@@ -176,6 +202,30 @@ def chiffrer_bytes_v4(mdp: str, contenu: bytes, *, salt: bytes) -> bytes:
     )
     token = Fernet(cle).encrypt(contenu)
     return encoder_v4(
+        token=token,
+        salt=salt,
+        time_cost=ARGON2_TIME_COST,
+        memory_cost_kib=ARGON2_MEMORY_COST_KIB,
+        parallelism=ARGON2_PARALLELISM,
+    )
+
+
+def chiffrer_bytes_v5(mdp: str, contenu: bytes, *, salt: bytes) -> bytes:
+    """Chiffre en v5: Argon2id + AES-GCM (AEAD moderne), encodé anti-`strings`."""
+
+    key = generer_cle_argon2id_raw(
+        mdp,
+        salt=salt,
+        time_cost=ARGON2_TIME_COST,
+        memory_cost_kib=ARGON2_MEMORY_COST_KIB,
+        parallelism=ARGON2_PARALLELISM,
+    )
+    # Nonce aléatoire (unique) requis par AES-GCM.
+    nonce = os.urandom(AEAD_NONCE_SIZE)
+    aad = HEADER_V2.pack(MAGIC_V5, salt, int(ARGON2_TIME_COST), int(ARGON2_MEMORY_COST_KIB), int(ARGON2_PARALLELISM))
+    ciphertext = AESGCM(key).encrypt(nonce, contenu, aad)
+    token = nonce + ciphertext
+    return encoder_v5(
         token=token,
         salt=salt,
         time_cost=ARGON2_TIME_COST,

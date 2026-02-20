@@ -4,10 +4,11 @@ import getpass
 import os
 import time
 
+from cryptography.exceptions import InvalidTag
 from cryptography.fernet import InvalidToken
 
 from .config import FICHIER, FICHIER_CLAIR
-from .crypto import chiffrer_bytes_v4, dechiffrer_bytes, decoder
+from .crypto import chiffrer_bytes_v5, dechiffrer_bytes, decoder
 from .editor import avertir_mdp_faible, confirmer_fin_edition, ouvrir_editeur
 from .storage import ecrire_chiffre, ecrire_clair, lire_chiffre, lire_clair
 
@@ -20,7 +21,7 @@ def _attente_apres_echec(tentative: int) -> None:
 def chiffrer_depuis_fichier(mdp: str, chemin_clair: str = FICHIER_CLAIR) -> None:
     avertir_mdp_faible(mdp)
     contenu = lire_clair(chemin_clair)
-    data = chiffrer_bytes_v4(mdp, contenu, salt=os.urandom(16))
+    data = chiffrer_bytes_v5(mdp, contenu, salt=os.urandom(16))
     ecrire_chiffre(data)
 
 
@@ -66,14 +67,14 @@ def dechiffrer_vers_fichier() -> None:
             contenu = dechiffrer_bytes(mdp, raw)
 
             # Migration automatique: une fois le mot de passe validé,
-            # on réécrit en v3 (anti-`strings`).
-            if version != "v4":
+            # on réécrit en v5 (AEAD moderne + anti-`strings`).
+            if version != "v5":
                 try:
-                    ecrire_chiffre(chiffrer_bytes_v4(mdp, contenu, salt=os.urandom(16)))
+                    ecrire_chiffre(chiffrer_bytes_v5(mdp, contenu, salt=os.urandom(16)))
                 except Exception:
                     pass
             break
-        except (InvalidToken, FileNotFoundError):
+        except (InvalidToken, InvalidTag, FileNotFoundError):
             print("Mot de passe incorrect ou fichier corrompu")
             _attente_apres_echec(tentative)
             if tentative >= 3:
@@ -135,13 +136,13 @@ def afficher_contenu() -> None:
             version = decoder(raw)[0]
             contenu = dechiffrer_bytes(mdp, raw)
 
-            if version != "v4":
+            if version != "v5":
                 try:
-                    ecrire_chiffre(chiffrer_bytes_v4(mdp, contenu, salt=os.urandom(16)))
+                    ecrire_chiffre(chiffrer_bytes_v5(mdp, contenu, salt=os.urandom(16)))
                 except Exception:
                     pass
             break
-        except (InvalidToken, FileNotFoundError):
+        except (InvalidToken, InvalidTag, FileNotFoundError):
             print("Mot de passe incorrect ou fichier corrompu")
             _attente_apres_echec(tentative)
             if tentative >= 3:
